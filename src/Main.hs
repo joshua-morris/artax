@@ -21,7 +21,7 @@ import SDL hiding (glBindTexture, Texture)
 main :: IO ()
 main = do
   initializeAll
-  window <- createWindow "Artax" defaultWindow { windowGraphicsContext = OpenGLContext defaultOpenGL, windowMode = FullscreenDesktop }
+  window <- createWindow "Artax" defaultWindow { windowGraphicsContext = OpenGLContext defaultOpenGL }
 
   glContext <- glCreateContext window
 
@@ -34,7 +34,7 @@ main = do
   vertexShader   <- loadShader GL_VERTEX_SHADER "shaders/vert.glsl"
   fragmentShader <- loadShader GL_FRAGMENT_SHADER "shaders/frag.glsl"
 
-  _ <- createProgram vertexShader fragmentShader
+  program <- createProgram vertexShader fragmentShader
 
   texture <- newTextureFromImage "textures/wall.jpg"
 
@@ -88,14 +88,14 @@ main = do
 
   glBindVertexArray 0
 
-  ourColor <- newCString "ourColor"
+  transP <- malloc
 
-  loop renderer vao texture
+  loop renderer vao texture transP program
   destroyWindow window
 
 
-loop :: Renderer -> GLuint -> Texture -> IO ()
-loop renderer vao texture = do
+loop :: Renderer -> GLuint -> Texture -> Ptr (M44 Float) -> Program -> IO ()
+loop renderer vao texture transP (Program program) = do
   openGL3NewFrame
   sdl2NewFrame
   newFrame
@@ -116,9 +116,20 @@ loop renderer vao texture = do
   render
   openGL3RenderDrawData =<< getDrawData
 
+  -- Set rotation matrix
+  timeValue <- time
+  let rotQ = axisAngle (V3 (0::GLfloat) 0 1) timeValue 
+  let rotM33 = fromQuaternion rotQ
+  let rotM33' = rotM33 !!* 0.5
+  let transformationMatrix = mkTransformationMat rotM33' (V3 0.5 (-0.5) 0)
+  poke transP (transpose transformationMatrix)
+  transform <- newCString "transform"
+  transformLoc <- glGetUniformLocation program transform
+  glUniformMatrix4fv transformLoc 1 GL_FALSE (castPtr transP)
+
   bindTexture texture
   glBindVertexArray vao
   glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
   glBindVertexArray 0
   present renderer
-  unless qPressed (loop renderer vao texture)
+  unless qPressed (loop renderer vao texture transP (Program program))

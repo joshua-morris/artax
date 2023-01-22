@@ -28,6 +28,7 @@ executable artax
                       gl,
                       JuicyPixels,
                       vector,
-                      dear-imgui
+                      dear-imgui,
+                      linear
     hs-source-dirs:   src
     default-language: Haskell2010
