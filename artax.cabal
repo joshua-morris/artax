@@ -20,7 +20,8 @@ executable artax
     import:           warnings
     main-is:          Main.hs
     include-dirs:     shaders
---    exposed-modules:  
+    other-modules:    Artax.Shader,
+                      Artax.Program
     build-depends:    base ^>=4.15.1.0,
                       sdl2,
                       gl

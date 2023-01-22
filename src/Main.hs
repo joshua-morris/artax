@@ -2,9 +2,11 @@
 
 module Main where
 
+import Artax.Shader
+import Artax.Program
+
 import Control.Monad (unless)
 import Foreign
-import Foreign.C.String (newCAStringLen)
 import Graphics.GL.Core33
 import Graphics.GL.Types
 import SDL
@@ -15,31 +17,10 @@ main = do
   window <- createWindow "Artax" defaultWindow { windowGraphicsContext = OpenGLContext defaultOpenGL }
   renderer <- createRenderer window (-1) defaultRenderer
 
-  vertexShader <- glCreateShader GL_VERTEX_SHADER
-  vertexShaderSource <- readFile "shaders/vert.glsl"
-  (sourceP, len) <- newCAStringLen vertexShaderSource
-  linesPtrsPtr <- newArray [sourceP]
-  lengthsP <- newArray [fromIntegral len]
-  glShaderSource vertexShader 1 linesPtrsPtr lengthsP
-  glCompileShader vertexShader
+  vertexShader   <- loadShader GL_VERTEX_SHADER "shaders/vert.glsl"
+  fragmentShader <- loadShader GL_FRAGMENT_SHADER "shaders/frag.glsl"
 
-  fragmentShader <- glCreateShader GL_FRAGMENT_SHADER
-  fragmentShaderSource <- readFile "shaders/frag.glsl"
-  (sourceP, len) <- newCAStringLen fragmentShaderSource
-  linesPtrsPtr <- newArray [sourceP]
-  lengthsP <- newArray [fromIntegral len]
-  glShaderSource fragmentShader 1 linesPtrsPtr lengthsP
-  glCompileShader fragmentShader
-
-  shaderProgram <- glCreateProgram
-  glAttachShader shaderProgram vertexShader
-  glAttachShader shaderProgram fragmentShader
-  glLinkProgram shaderProgram
-
-  glDeleteShader vertexShader
-  glDeleteShader fragmentShader
-
-  glUseProgram shaderProgram
+  _ <- createProgram vertexShader fragmentShader
 
   let vertices = [
           -0.5, -0.5, 0.0,
