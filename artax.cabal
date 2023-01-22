@@ -21,6 +21,7 @@ executable artax
     main-is:          Main.hs
     include-dirs:     shaders
     other-modules:    Artax.Shader,
+                      Artax.Texture,
                       Artax.Program
     build-depends:    base ^>=4.15.1.0,
                       sdl2,

@@ -4,20 +4,19 @@ module Main where
 
 import Artax.Shader
 import Artax.Program
+import Artax.Texture
 
-import Codec.Picture
 import Control.Monad (unless)
-import qualified Data.Vector.Storable as VS
 import Foreign
 import Foreign.C.String (newCString)
 import Graphics.GL.Core33
 import Graphics.GL.Types
-import SDL hiding (glBindTexture)
+import SDL hiding (glBindTexture, Texture)
 
 main :: IO ()
 main = do
   initializeAll
-  window <- createWindow "Artax" defaultWindow { windowGraphicsContext = OpenGLContext defaultOpenGL }
+  window <- createWindow "Artax" defaultWindow { windowGraphicsContext = OpenGLContext defaultOpenGL, windowMode = FullscreenDesktop }
   renderer <- createRenderer window (-1) defaultRenderer
 
   vertexShader   <- loadShader GL_VERTEX_SHADER "shaders/vert.glsl"
@@ -25,28 +24,7 @@ main = do
 
   _ <- createProgram vertexShader fragmentShader
 
-  eErrDI <- readImage "textures/wall.jpg"
-  dyImage <- case eErrDI of
-      Left e -> do
-        return $ ImageRGB8 $ generateImage (\x y ->
-            let x' = fromIntegral x in PixelRGB8 x' x' x') 800 600
-      Right di -> return di
-
-  let ipixelrgb8 = convertRGB8 dyImage
-      iWidth     = fromIntegral $ imageWidth ipixelrgb8
-      iHeight    = fromIntegral $ imageHeight ipixelrgb8
-      iData      = imageData ipixelrgb8
-
-
-  textureP <- malloc
-  glGenTextures 1 textureP
-  texture <- peek textureP
-  glBindTexture GL_TEXTURE_2D texture
-  VS.unsafeWith iData $ \dataP ->
-      glTexImage2D GL_TEXTURE_2D 0 GL_RGB8 iWidth iHeight 0 GL_RGB GL_UNSIGNED_BYTE (castPtr dataP)
-
-  glGenerateMipmap GL_TEXTURE_2D
-  glBindTexture GL_TEXTURE_2D 0
+  texture <- newTextureFromImage "textures/wall.jpg"
 
   let vertices = [
           0.5, 0.5, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0,
@@ -104,7 +82,7 @@ main = do
   destroyWindow window
 
 
-loop :: Renderer -> GLuint -> GLuint -> IO ()
+loop :: Renderer -> GLuint -> Texture -> IO ()
 loop renderer vao texture = do
   events <- pollEvents
   let eventIsQPress event =
@@ -116,10 +94,9 @@ loop renderer vao texture = do
       qPressed = any eventIsQPress events
   glClearColor 0.2 0.3 0.3 1.0
   glClear GL_COLOR_BUFFER_BIT
-  glBindTexture GL_TEXTURE_2D texture
+  bindTexture texture
   glBindVertexArray vao
   glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
   glBindVertexArray 0
-  glBindTexture GL_TEXTURE_2D 0
   present renderer
   unless qPressed (loop renderer vao texture)
