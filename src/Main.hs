@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BlockArguments #-}
 
 module Main where
 
@@ -7,6 +8,10 @@ import Artax.Program
 import Artax.Texture
 
 import Control.Monad (unless)
+import DearImGui
+import DearImGui.OpenGL3
+import DearImGui.SDL
+import DearImGui.SDL.OpenGL
 import Foreign
 import Foreign.C.String (newCString)
 import Graphics.GL.Core33
@@ -17,6 +22,13 @@ main :: IO ()
 main = do
   initializeAll
   window <- createWindow "Artax" defaultWindow { windowGraphicsContext = OpenGLContext defaultOpenGL, windowMode = FullscreenDesktop }
+
+  glContext <- glCreateContext window
+
+  _ <- createContext
+  _ <- sdl2InitForOpenGL window glContext
+  _ <- openGL3Init
+
   renderer <- createRenderer window (-1) defaultRenderer
 
   vertexShader   <- loadShader GL_VERTEX_SHADER "shaders/vert.glsl"
@@ -84,6 +96,13 @@ main = do
 
 loop :: Renderer -> GLuint -> Texture -> IO ()
 loop renderer vao texture = do
+  openGL3NewFrame
+  sdl2NewFrame
+  newFrame
+  
+  withWindowOpen "Artax" do
+    text "TODO" 
+
   events <- pollEvents
   let eventIsQPress event =
         case eventPayload event of
@@ -94,6 +113,9 @@ loop renderer vao texture = do
       qPressed = any eventIsQPress events
   glClearColor 0.2 0.3 0.3 1.0
   glClear GL_COLOR_BUFFER_BIT
+  render
+  openGL3RenderDrawData =<< getDrawData
+
   bindTexture texture
   glBindVertexArray vao
   glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
