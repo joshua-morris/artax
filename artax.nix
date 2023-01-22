@@ -1,4 +1,4 @@
-{ mkDerivation, base, sdl2}:
+{ mkDerivation, base, sdl2, zlib}:
 mkDerivation {
   pname = "artax";
   version = "0.0.0.9";
