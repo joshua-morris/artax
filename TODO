@@ -1,0 +1,6 @@
+* Handle errors when loading shaders and linking program
+* Make shader source a command line argument
+* Buffer and vertex array classes
+* Uniforms
+* Textures
+* Camera
