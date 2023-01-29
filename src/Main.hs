@@ -6,14 +6,15 @@ module Main where
 import Artax.Shader
 import Artax.Program
 import Artax.Texture
+import Artax.Uniform
 
 import Control.Monad (unless)
+import Data.StateVar
 import DearImGui
 import DearImGui.OpenGL3
 import DearImGui.SDL
 import DearImGui.SDL.OpenGL
 import Foreign
-import Foreign.C.String (newCString)
 import Graphics.GL.Core33
 import Graphics.GL.Types
 import SDL hiding (glBindTexture, Texture)
@@ -24,18 +25,14 @@ main = do
   window <- createWindow "Artax" defaultWindow { windowGraphicsContext = OpenGLContext defaultOpenGL }
 
   glContext <- glCreateContext window
-
   _ <- createContext
   _ <- sdl2InitForOpenGL window glContext
   _ <- openGL3Init
 
   renderer <- createRenderer window (-1) defaultRenderer
-
   vertexShader   <- loadShader GL_VERTEX_SHADER "shaders/vert.glsl"
   fragmentShader <- loadShader GL_FRAGMENT_SHADER "shaders/frag.glsl"
-
   program <- createProgram vertexShader fragmentShader
-
   texture <- newTextureFromImage "textures/wall.jpg"
 
   let vertices = [
@@ -88,14 +85,23 @@ main = do
 
   glBindVertexArray 0
 
-  transP <- malloc
+  -- Set uniforms
+  trans <- uniformMatrix4fv <$> (uniformLocation program "transform")
+  model <- uniformMatrix4fv <$> (uniformLocation program "model")
+  view <- uniformMatrix4fv <$> (uniformLocation program "view")
+  projection <- uniformMatrix4fv <$> (uniformLocation program "projection")
 
-  loop renderer vao texture transP program
+  loop renderer vao texture trans
   destroyWindow window
 
 
-loop :: Renderer -> GLuint -> Texture -> Ptr (M44 Float) -> Program -> IO ()
-loop renderer vao texture transP (Program program) = do
+loop :: 
+  Renderer 
+  -> GLuint 
+  -> Texture 
+  -> SettableStateVar (M44 Float) 
+  -> IO ()
+loop renderer vao texture trans = do
   openGL3NewFrame
   sdl2NewFrame
   newFrame
@@ -122,14 +128,11 @@ loop renderer vao texture transP (Program program) = do
   let rotM33 = fromQuaternion rotQ
   let rotM33' = rotM33 !!* 0.5
   let transformationMatrix = mkTransformationMat rotM33' (V3 0.5 (-0.5) 0)
-  poke transP (transpose transformationMatrix)
-  transform <- newCString "transform"
-  transformLoc <- glGetUniformLocation program transform
-  glUniformMatrix4fv transformLoc 1 GL_FALSE (castPtr transP)
+  trans $= transpose transformationMatrix
 
   bindTexture texture
   glBindVertexArray vao
   glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
   glBindVertexArray 0
   present renderer
-  unless qPressed (loop renderer vao texture transP (Program program))
+  unless qPressed (loop renderer vao texture trans)
