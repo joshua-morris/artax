@@ -47,5 +47,5 @@ newTextureFromImage path = do
       height     = fromIntegral $ imageHeight ipixelrgb8
       image      = imageData ipixelrgb8
 
-  texture <- newTexture image width height
+  texture <- newTexture image width height 
   return $ texture

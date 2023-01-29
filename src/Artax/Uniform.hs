@@ -21,8 +21,12 @@ uniformLocation (Program p) s = liftIO $ do
     l <- glGetUniformLocation p s'
     return $ l 
 
+uniform1i :: UniformLocation -> SettableStateVar Int32
+uniform1i l = SettableStateVar s
+  where
+    s = glUniform1i (coerce l)
+
 uniformMatrix4fv :: UniformLocation -> SettableStateVar (M44 Float) 
 uniformMatrix4fv l = SettableStateVar s 
   where
-    s v = alloca $ \(ptr::Ptr (M44 Float)) -> 
-            poke ptr v >> glUniformMatrix4fv (coerce l) 1 GL_FALSE (castPtr ptr) 
+    s v = with (transpose v) (\(ptr::(Ptr (M44 Float))) -> glUniformMatrix4fv (coerce l) 1 GL_FALSE (castPtr ptr))
