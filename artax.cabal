@@ -20,17 +20,19 @@ executable artax
     import:           warnings
     main-is:          Main.hs
     include-dirs:     shaders
-    other-modules:    Artax.Shader,
-                      Artax.Texture,
+    other-modules:    Artax.Camera,
                       Artax.Program,
+                      Artax.Shader,
+                      Artax.Texture,
                       Artax.Uniform
     build-depends:    base ^>=4.15.1.0,
                       sdl2,
                       gl,
                       JuicyPixels,
                       vector,
-                      dear-imgui,
                       linear,
-                      StateVar
+                      StateVar,
+                      lens,
+                      data-default
     hs-source-dirs:   src
     default-language: Haskell2010

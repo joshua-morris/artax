@@ -3,18 +3,17 @@
 
 module Main where
 
+import Artax.Camera
 import Artax.Shader
 import Artax.Program
 import Artax.Texture
 import Artax.Uniform
 
-import Control.Monad (unless, forM_)
+import Control.Monad (unless)
 import Data.Bits
+import Data.Default
+import Data.Foldable
 import Data.StateVar
-import DearImGui
-import DearImGui.OpenGL3
-import DearImGui.SDL
-import DearImGui.SDL.OpenGL
 import Foreign
 import Graphics.GL.Core33
 import Graphics.GL.Types
@@ -34,24 +33,8 @@ cubes = [
     V3 (-1.3) 1 (-1.5)
     ]
 
-main :: IO ()
-main = do
-  initializeAll
-  window <- createWindow "Artax" defaultWindow { windowGraphicsContext = OpenGLContext defaultOpenGL, windowInitialSize = (V2 1800 1000) }
-
-  glContext <- glCreateContext window
-  _ <- createContext
-  _ <- sdl2InitForOpenGL window glContext
-  _ <- openGL3Init
-
-  renderer <- createRenderer window (-1) defaultRenderer
-  vertexShader   <- loadShader GL_VERTEX_SHADER "shaders/vert.glsl"
-  fragmentShader <- loadShader GL_FRAGMENT_SHADER "shaders/frag.glsl"
-  program <- createProgram vertexShader fragmentShader
-  texture0 <- newTextureFromImage "textures/container.jpg"
-  glEnable GL_DEPTH_TEST
-
-  let vertices = [ 
+vertices :: [GLfloat]
+vertices = [ 
           -0.5, -0.5, -0.5,  0.0, 0.0,
           0.5, -0.5, -0.5,  1.0, 0.0,
           0.5,  0.5, -0.5,  1.0, 1.0,
@@ -88,89 +71,88 @@ main = do
           0.5,  0.5,  0.5,  1.0, 0.0,
           -0.5,  0.5,  0.5,  0.0, 0.0,
           -0.5,  0.5, -0.5,  0.0, 1.0
-          ] :: [GLfloat]
-  let vsize = fromIntegral $ sizeOf (0.0::GLfloat)*(length vertices)
-  verticesP <- newArray vertices
+          ]
 
+main :: IO ()
+main = do
+  initializeAll
+  -- Create SDL window and set it as the GL context
+  window <- createWindow "Artax" defaultWindow { windowGraphicsContext = OpenGLContext defaultOpenGL, windowInitialSize = (V2 1800 1000) }
+  _      <- glCreateContext window
+
+  renderer       <- createRenderer window (-1) defaultRenderer
+  -- Load and compile shader program
+  vertexShader   <- loadShader GL_VERTEX_SHADER "shaders/vert.glsl"
+  fragmentShader <- loadShader GL_FRAGMENT_SHADER "shaders/frag.glsl"
+  program        <- createProgram vertexShader fragmentShader
+
+  -- Load and set texture uniforms
+  texture0       <- newTextureFromImage "textures/container.jpg"
+  tex0loc        <- uniform1i <$> uniformLocation program "ourTexture0"
+
+  glEnable GL_DEPTH_TEST
+
+  -- Vertex array
   vaoP <- malloc
   glGenVertexArrays 1 vaoP
   vao <- peek vaoP
   glBindVertexArray vao
 
+  -- Vertex buffer with vertices data
   vboP <- malloc
   glGenBuffers 1 vboP
   vbo <- peek vboP
   glBindBuffer GL_ARRAY_BUFFER vbo
+
+  let vsize = fromIntegral $ sizeOf (0.0::GLfloat)*(length vertices)
+  verticesP <- newArray vertices
   glBufferData GL_ARRAY_BUFFER vsize (castPtr verticesP) GL_STATIC_DRAW
 
   let floatSize = (fromIntegral $ sizeOf (0.0::GLfloat)) :: GLsizei
       nFloatOffset = \n -> castPtr $ plusPtr nullPtr (fromIntegral $ n*floatSize)
 
-  -- Position
+  -- Location 0: position
   glVertexAttribPointer 0 3 GL_FLOAT GL_FALSE (5*floatSize) nullPtr
   glEnableVertexAttribArray 0
-
-  -- Texture
+  -- Location 1: texture
   glVertexAttribPointer 1 2 GL_FLOAT GL_FALSE (5*floatSize) (nFloatOffset 3)
   glEnableVertexAttribArray 1
 
   glBindVertexArray 0
 
-  -- Set uniforms
-  tex0loc    <- uniform1i <$> uniformLocation program "ourTexture0"
+  -- Set uniform camera
   model      <- uniformMatrix4fv <$> (uniformLocation program "model")
   view       <- uniformMatrix4fv <$> (uniformLocation program "view")
   projection <- uniformMatrix4fv <$> (uniformLocation program "projection")
 
-  loop renderer vao texture0 tex0loc model view projection 
+  let loop c = do
+        events <- pollEvents
+        let camera = foldl (updateCamera 0.2) c events
+        let eventIsQPress event =
+              case eventPayload event of
+                KeyboardEvent keyboardEvent ->
+                  keyboardEventKeyMotion keyboardEvent == Pressed &&
+                  keysymKeycode (keyboardEventKeysym keyboardEvent) == KeycodeQ
+                _ -> False
+            qPressed = any eventIsQPress events
+
+        glClearColor 0.2 0.3 0.3 1.0
+        glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
+
+        glActiveTexture GL_TEXTURE0
+        bindTexture texture0
+        tex0loc $= 0 
+        glBindVertexArray vao
+
+        view       $= lookAt (_position camera) (_position camera + _front camera) (_up camera)
+        projection $= perspective (pi/4) (1800/1000) 0.1 100.0
+        forM_ (zip cubes [0..]) $ \(cube,i) -> do
+          model $= mkTransformation (axisAngle (V3 (1::GLfloat) 0.3 0.5) (20*i)) cube
+          glDrawArrays GL_TRIANGLES 0 36
+
+        glBindVertexArray 0
+        present renderer
+        unless qPressed (loop camera)
+  
+  loop (def :: Camera)
   destroyWindow window
-
-
-loop :: 
-  Renderer 
-  -> GLuint 
-  -> Texture 
-  -> SettableStateVar Int32
-  -> SettableStateVar (M44 Float) 
-  -> SettableStateVar (M44 Float)
-  -> SettableStateVar (M44 Float)
-  -> IO ()
-loop renderer vao texture0 tex0loc model view projection = do
-  openGL3NewFrame
-  sdl2NewFrame
-  newFrame
-
-  events <- pollEvents
-  let eventIsQPress event =
-        case eventPayload event of
-          KeyboardEvent keyboardEvent ->
-            keyboardEventKeyMotion keyboardEvent == Pressed &&
-            keysymKeycode (keyboardEventKeysym keyboardEvent) == KeycodeQ
-          _ -> False
-      qPressed = any eventIsQPress events
-  glClearColor 0.2 0.3 0.3 1.0
-  glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
-  render
-  openGL3RenderDrawData =<< getDrawData
-
-  timeValue <- time
-  let radius = 10
-      camX   = sin timeValue * radius
-      camZ   = cos timeValue * radius
-
-  view $= lookAt (V3 camX 0 camZ) (V3 0 0 0) (V3 0 1 0)
-  projection $= perspective (pi/4) (1800/1000) 0.1 100.0
-
-  glActiveTexture GL_TEXTURE0
-  bindTexture texture0
-  tex0loc $= 0 
-  glBindVertexArray vao
-
-  forM_ (zip cubes [0..]) $ \(cube,i) -> do
-    let angle = 20*i
-    model $= mkTransformation (axisAngle (V3 (1::GLfloat) 0.3 0.5) angle) cube
-    glDrawArrays GL_TRIANGLES 0 36
-
-  glBindVertexArray 0
-  present renderer
-  unless qPressed (loop renderer vao texture0 tex0loc model view projection)
